@@ -15,9 +15,15 @@ function App() {
   const initColony = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const width = canvas.width;
-    const height = canvas.height;
-    stateRef.current = createColony(width, height);
+    
+    const width = Math.max(canvas.width, window.innerWidth, 800);
+    const height = Math.max(canvas.height, window.innerHeight, 600);
+    
+    try {
+      stateRef.current = createColony(width, height);
+    } catch (e) {
+      console.error('Error creating colony:', e);
+    }
   }, []);
 
   useEffect(() => {
@@ -25,13 +31,20 @@ function App() {
     if (!canvas) return;
 
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const width = window.innerWidth || 800;
+      const height = window.innerHeight || 600;
+      
+      canvas.width = width;
+      canvas.height = height;
+      
       if (!stateRef.current) {
         initColony();
       } else {
-        // Recreate colony on resize for proper positioning
-        stateRef.current = createColony(canvas.width, canvas.height);
+        try {
+          stateRef.current = createColony(width, height);
+        } catch (e) {
+          console.error('Error recreating colony:', e);
+        }
       }
     };
 
@@ -39,35 +52,41 @@ function App() {
     window.addEventListener('resize', resizeCanvas);
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      console.error('Could not get 2D context');
+      return;
+    }
 
     let statsCounter = 0;
 
     const animate = (time: number) => {
-      if (!stateRef.current) {
-        animFrameRef.current = requestAnimationFrame(animate);
-        return;
-      }
+      try {
+        if (!stateRef.current) {
+          animFrameRef.current = requestAnimationFrame(animate);
+          return;
+        }
 
-      const dt = lastTimeRef.current ? Math.min(time - lastTimeRef.current, 50) : 16;
-      lastTimeRef.current = time;
+        const dt = lastTimeRef.current ? Math.min(time - lastTimeRef.current, 50) : 16;
+        lastTimeRef.current = time;
 
-      if (!isPausedRef.current) {
-        updateColony(stateRef.current, dt * speedRef.current);
-      }
+        if (!isPausedRef.current) {
+          updateColony(stateRef.current, dt * speedRef.current);
+        }
 
-      renderColony(ctx, stateRef.current, time);
+        renderColony(ctx, stateRef.current, time);
 
-      // Update stats every ~500ms
-      statsCounter += dt;
-      if (statsCounter > 500) {
-        statsCounter = 0;
-        setStats({
-          ants: stateRef.current.ants.length,
-          food: stateRef.current.foodCollected,
-          storage: Math.floor(stateRef.current.foodInStorage),
-          pupae: stateRef.current.pupae.length,
-        });
+        statsCounter += dt;
+        if (statsCounter > 500) {
+          statsCounter = 0;
+          setStats({
+            ants: stateRef.current.ants.length,
+            food: stateRef.current.foodCollected,
+            storage: Math.floor(stateRef.current.foodInStorage),
+            pupae: stateRef.current.pupae.length,
+          });
+        }
+      } catch (e) {
+        console.error('Animation error:', e);
       }
 
       animFrameRef.current = requestAnimationFrame(animate);
@@ -98,35 +117,66 @@ function App() {
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-black">
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#000' }}>
       <canvas
         ref={canvasRef}
-        className="block w-full h-full"
+        style={{ display: 'block', width: '100%', height: '100%' }}
       />
       
-      {/* Control Panel */}
-      <div className="absolute top-4 right-4 bg-black/75 backdrop-blur-sm rounded-xl p-4 text-white space-y-3 border border-amber-900/30 shadow-xl">
-        <h2 className="text-sm font-bold text-amber-300 tracking-wide flex items-center gap-2">
-          <span>⚙️</span> Управление
+      <div style={{
+        position: 'absolute',
+        top: '16px',
+        right: '16px',
+        background: 'rgba(0,0,0,0.75)',
+        backdropFilter: 'blur(8px)',
+        borderRadius: '12px',
+        padding: '16px',
+        color: 'white',
+        border: '1px solid rgba(146, 64, 14, 0.3)',
+        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
+        minWidth: '200px'
+      }}>
+        <h2 style={{ fontSize: '14px', fontWeight: 'bold', color: '#fcd34d', marginBottom: '12px' }}>
+          ⚙️ Управление
         </h2>
         
-        <div className="flex gap-2">
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
           <button
             onClick={handlePause}
-            className="px-3 py-1.5 bg-amber-700 hover:bg-amber-600 active:bg-amber-800 rounded-lg text-xs font-medium transition-colors shadow-md"
+            style={{
+              padding: '6px 12px',
+              background: '#b45309',
+              border: 'none',
+              borderRadius: '8px',
+              color: 'white',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer'
+            }}
           >
             {isPaused ? '▶ Играть' : '⏸ Пауза'}
           </button>
           <button
             onClick={handleReset}
-            className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 active:bg-emerald-900 rounded-lg text-xs font-medium transition-colors shadow-md"
+            style={{
+              padding: '6px 12px',
+              background: '#065f46',
+              border: 'none',
+              borderRadius: '8px',
+              color: 'white',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer'
+            }}
           >
-            🔄 Новая колония
+            🔄 Сброс
           </button>
         </div>
 
-        <div>
-          <label className="text-xs text-gray-300 block mb-1">Скорость: ×{speed}</label>
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{ fontSize: '12px', color: '#d1d5db', display: 'block', marginBottom: '4px' }}>
+            Скорость: ×{speed}
+          </label>
           <input
             type="range"
             min="0.5"
@@ -134,59 +184,70 @@ function App() {
             step="0.5"
             value={speed}
             onChange={(e) => handleSpeed(parseFloat(e.target.value))}
-            className="w-full"
+            style={{ width: '100%' }}
           />
         </div>
 
-        <div className="text-xs text-gray-300 space-y-1.5 pt-2 border-t border-white/10">
-          <p className="text-amber-200/80 font-medium text-[11px]">Обитатели:</p>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-amber-900 border border-amber-600 inline-block"></span>
+        <div style={{ fontSize: '11px', color: '#d1d5db', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+          <p style={{ color: '#fde68a', fontWeight: '500', marginBottom: '6px' }}>Обитатели:</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#78350f', border: '1px solid #d97706', display: 'inline-block' }}></span>
             <span>Матка (1)</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-gray-800 border border-gray-500 inline-block"></span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#1f2937', border: '1px solid #6b7280', display: 'inline-block' }}></span>
             <span>Фуражиры (18)</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-amber-950 border border-amber-700 inline-block"></span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#451a03', border: '1px solid #b45309', display: 'inline-block' }}></span>
             <span>Няньки (12)</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-stone-800 border border-stone-500 inline-block"></span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#292524', border: '1px solid #78716c', display: 'inline-block' }}></span>
             <span>Свита матки (6)</span>
           </div>
         </div>
       </div>
 
-      {/* Stats overlay */}
-      <div className="absolute bottom-4 left-4 bg-black/75 backdrop-blur-sm rounded-xl p-4 text-white border border-amber-900/30 shadow-xl">
-        <div className="grid grid-cols-4 gap-5 text-center">
+      <div style={{
+        position: 'absolute',
+        bottom: '16px',
+        left: '16px',
+        background: 'rgba(0,0,0,0.75)',
+        backdropFilter: 'blur(8px)',
+        borderRadius: '12px',
+        padding: '16px',
+        color: 'white',
+        border: '1px solid rgba(146, 64, 14, 0.3)',
+        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)'
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', textAlign: 'center' }}>
           <div>
-            <div className="text-2xl font-bold text-amber-400">{stats.ants}</div>
-            <div className="text-[10px] text-gray-400 mt-0.5">Муравьёв</div>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fbbf24' }}>{stats.ants}</div>
+            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Муравьёв</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-green-400">{stats.food}</div>
-            <div className="text-[10px] text-gray-400 mt-0.5">Собрано</div>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#4ade80' }}>{stats.food}</div>
+            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Собрано</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-yellow-300">{stats.storage}</div>
-            <div className="text-[10px] text-gray-400 mt-0.5">В хранилище</div>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fde047' }}>{stats.storage}</div>
+            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>В хранилище</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-orange-300">{stats.pupae}</div>
-            <div className="text-[10px] text-gray-400 mt-0.5">Куколок</div>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fdba74' }}>{stats.pupae}</div>
+            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Куколок</div>
           </div>
         </div>
       </div>
 
-      {/* Title */}
-      <div className="absolute top-4 left-4 text-white pointer-events-none">
-        <h1 className="text-xl font-bold text-amber-200 drop-shadow-lg flex items-center gap-2">
-          <span className="text-2xl">🐜</span> Муравейник
+      <div style={{ position: 'absolute', top: '16px', left: '16px', color: 'white', pointerEvents: 'none' }}>
+        <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#fde68a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '24px' }}>🐜</span> Муравейник
         </h1>
-        <p className="text-xs text-gray-300/80 mt-1 ml-8">Симуляция муравьиной колонии в реальном времени</p>
+        <p style={{ fontSize: '12px', color: 'rgba(209, 213, 219, 0.8)', marginTop: '4px', marginLeft: '32px' }}>
+          Симуляция муравьиной колонии в реальном времени
+        </p>
       </div>
     </div>
   );

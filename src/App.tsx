@@ -9,6 +9,7 @@ function App() {
   const [stats, setStats] = useState({ ants: 0, food: 0, storage: 0, pupae: 0 });
   const [isPaused, setIsPaused] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const [error, setError] = useState<string | null>(null);
   const isPausedRef = useRef(false);
   const speedRef = useRef(1);
 
@@ -16,19 +17,29 @@ function App() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
-    const width = Math.max(canvas.width, window.innerWidth, 800);
-    const height = Math.max(canvas.height, window.innerHeight, 600);
-    
     try {
+      const width = Math.max(canvas.width || window.innerWidth, 800);
+      const height = Math.max(canvas.height || window.innerHeight, 600);
       stateRef.current = createColony(width, height);
+      setError(null);
     } catch (e) {
       console.error('Error creating colony:', e);
+      setError(e instanceof Error ? e.message : 'Unknown error');
     }
   }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      setError('Canvas element not found');
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setError('Could not get 2D context');
+      return;
+    }
 
     const resizeCanvas = () => {
       const width = window.innerWidth || 800;
@@ -37,25 +48,17 @@ function App() {
       canvas.width = width;
       canvas.height = height;
       
-      if (!stateRef.current) {
-        initColony();
-      } else {
-        try {
-          stateRef.current = createColony(width, height);
-        } catch (e) {
-          console.error('Error recreating colony:', e);
-        }
+      try {
+        stateRef.current = createColony(width, height);
+        setError(null);
+      } catch (e) {
+        console.error('Error recreating colony:', e);
+        setError(e instanceof Error ? e.message : 'Unknown error');
       }
     };
 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      console.error('Could not get 2D context');
-      return;
-    }
 
     let statsCounter = 0;
 
@@ -87,6 +90,7 @@ function App() {
         }
       } catch (e) {
         console.error('Animation error:', e);
+        setError(e instanceof Error ? e.message : 'Animation error');
       }
 
       animFrameRef.current = requestAnimationFrame(animate);
@@ -98,7 +102,7 @@ function App() {
       cancelAnimationFrame(animFrameRef.current);
       window.removeEventListener('resize', resizeCanvas);
     };
-  }, [initColony]);
+  }, []);
 
   const handlePause = () => {
     setIsPaused(prev => {
@@ -116,138 +120,96 @@ function App() {
     initColony();
   };
 
+  if (error) {
+    return (
+      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <h1 style={{ fontSize: '24px', marginBottom: '10px' }}>Ошибка</h1>
+          <p style={{ color: '#f87171' }}>{error}</p>
+          <button onClick={handleReset} className="btn btn-reset" style={{ marginTop: '20px' }}>
+            Попробовать снова
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#000' }}>
-      <canvas
-        ref={canvasRef}
-        style={{ display: 'block', width: '100%', height: '100%' }}
-      />
+    <div className="app-container">
+      <canvas ref={canvasRef} className="canvas" />
       
-      <div style={{
-        position: 'absolute',
-        top: '16px',
-        right: '16px',
-        background: 'rgba(0,0,0,0.75)',
-        backdropFilter: 'blur(8px)',
-        borderRadius: '12px',
-        padding: '16px',
-        color: 'white',
-        border: '1px solid rgba(146, 64, 14, 0.3)',
-        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
-        minWidth: '200px'
-      }}>
-        <h2 style={{ fontSize: '14px', fontWeight: 'bold', color: '#fcd34d', marginBottom: '12px' }}>
-          ⚙️ Управление
-        </h2>
+      <div className="panel control-panel">
+        <h2 className="panel-title">⚙️ Управление</h2>
         
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-          <button
-            onClick={handlePause}
-            style={{
-              padding: '6px 12px',
-              background: '#b45309',
-              border: 'none',
-              borderRadius: '8px',
-              color: 'white',
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: 'pointer'
-            }}
-          >
+        <div className="btn-row">
+          <button onClick={handlePause} className="btn btn-pause">
             {isPaused ? '▶ Играть' : '⏸ Пауза'}
           </button>
-          <button
-            onClick={handleReset}
-            style={{
-              padding: '6px 12px',
-              background: '#065f46',
-              border: 'none',
-              borderRadius: '8px',
-              color: 'white',
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: 'pointer'
-            }}
-          >
+          <button onClick={handleReset} className="btn btn-reset">
             🔄 Сброс
           </button>
         </div>
 
-        <div style={{ marginBottom: '12px' }}>
-          <label style={{ fontSize: '12px', color: '#d1d5db', display: 'block', marginBottom: '4px' }}>
-            Скорость: ×{speed}
-          </label>
+        <div>
+          <label className="speed-label">Скорость: ×{speed}</label>
           <input
             type="range"
+            className="speed-slider"
             min="0.5"
             max="3"
             step="0.5"
             value={speed}
             onChange={(e) => handleSpeed(parseFloat(e.target.value))}
-            style={{ width: '100%' }}
           />
         </div>
 
-        <div style={{ fontSize: '11px', color: '#d1d5db', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          <p style={{ color: '#fde68a', fontWeight: '500', marginBottom: '6px' }}>Обитатели:</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#78350f', border: '1px solid #d97706', display: 'inline-block' }}></span>
+        <div className="legend">
+          <p className="legend-title">Обитатели:</p>
+          <div className="legend-item">
+            <span className="legend-dot" style={{ background: '#78350f', border: '1px solid #d97706' }}></span>
             <span>Матка (1)</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#1f2937', border: '1px solid #6b7280', display: 'inline-block' }}></span>
+          <div className="legend-item">
+            <span className="legend-dot" style={{ background: '#1f2937', border: '1px solid #6b7280' }}></span>
             <span>Фуражиры (18)</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#451a03', border: '1px solid #b45309', display: 'inline-block' }}></span>
+          <div className="legend-item">
+            <span className="legend-dot" style={{ background: '#451a03', border: '1px solid #b45309' }}></span>
             <span>Няньки (12)</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#292524', border: '1px solid #78716c', display: 'inline-block' }}></span>
+          <div className="legend-item">
+            <span className="legend-dot" style={{ background: '#292524', border: '1px solid #78716c' }}></span>
             <span>Свита матки (6)</span>
           </div>
         </div>
       </div>
 
-      <div style={{
-        position: 'absolute',
-        bottom: '16px',
-        left: '16px',
-        background: 'rgba(0,0,0,0.75)',
-        backdropFilter: 'blur(8px)',
-        borderRadius: '12px',
-        padding: '16px',
-        color: 'white',
-        border: '1px solid rgba(146, 64, 14, 0.3)',
-        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)'
-      }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', textAlign: 'center' }}>
+      <div className="panel stats-panel">
+        <div className="stats-grid">
           <div>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fbbf24' }}>{stats.ants}</div>
-            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Муравьёв</div>
+            <div className="stat-value" style={{ color: '#fbbf24' }}>{stats.ants}</div>
+            <div className="stat-label">Муравьёв</div>
           </div>
           <div>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#4ade80' }}>{stats.food}</div>
-            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Собрано</div>
+            <div className="stat-value" style={{ color: '#4ade80' }}>{stats.food}</div>
+            <div className="stat-label">Собрано</div>
           </div>
           <div>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fde047' }}>{stats.storage}</div>
-            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>В хранилище</div>
+            <div className="stat-value" style={{ color: '#fde047' }}>{stats.storage}</div>
+            <div className="stat-label">В хранилище</div>
           </div>
           <div>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fdba74' }}>{stats.pupae}</div>
-            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Куколок</div>
+            <div className="stat-value" style={{ color: '#fdba74' }}>{stats.pupae}</div>
+            <div className="stat-label">Куколок</div>
           </div>
         </div>
       </div>
 
-      <div style={{ position: 'absolute', top: '16px', left: '16px', color: 'white', pointerEvents: 'none' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#fde68a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '24px' }}>🐜</span> Муравейник
+      <div className="panel title-panel">
+        <h1 className="title-text">
+          <span className="title-emoji">🐜</span> Муравейник
         </h1>
-        <p style={{ fontSize: '12px', color: 'rgba(209, 213, 219, 0.8)', marginTop: '4px', marginLeft: '32px' }}>
-          Симуляция муравьиной колонии в реальном времени
-        </p>
+        <p className="subtitle">Симуляция муравьиной колонии в реальном времени</p>
       </div>
     </div>
   );
